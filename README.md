@@ -27,6 +27,11 @@ allCountriesCities.txt
 * Total of 1,264,940 cities listed
 * Includes ISO2 country code, city name, latitude, longitude
 * Additional identifying information such as state (for USA), county (UK), province (Canada), etc. are listed as `adminCode1`, `adminName1`, `adminCode2`, `adminName2`, etc.
+* *Too large to store on github!* 
+  * Need to download it from this location: http://opensource.unlikelysource.org/allCountriesCities.txt
+```
+wget http://opensource.unlikelysource.org/allCountriesCities.txt
+```
 
 ### Comma Delimited
 
