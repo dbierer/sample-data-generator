@@ -13,7 +13,8 @@ define('LOREM_IPSUM', __DIR__ . '/lorem_ipsum.txt');
 $max        = 300;         // target number of entries to generate
 $inserted   = 0;
 $processed  = 0;
-$writeJs    = FALSE;    // set this TRUE to output JS file to perform inserts
+$written    = 0;
+$writeJs    = TRUE;    // set this TRUE to output JS file to perform inserts
 $writeBson  = FALSE; // set this TRUE to directly input into MongoDB database
 $sourceDb   = 'source_data';
 $targetDb   = 'sweetscomplete';
@@ -54,14 +55,14 @@ try {
             $prodKey = $row[1];
             $photoFn = __DIR__ . '/' . $targetDb . '/' . $prodKey . '.png';
             $skuKey  = array_search($row[0], $categories);
-            $sku     = strtoupper(substr($prodKey, 0, 3))
-                     . ($skuKey + 1) * 100 + $count++;
+            $sku     = strtoupper(substr($prodKey, 0, 4))
+                     . (($skuKey + 1) * 100 + $count);
+            $count += 3;
             $description = LoremIpsum::generateIpsum($loremIpsum, rand(1,5));
-            var_dump($skuKey); continue;
                             
             // set up document to be inserted
             $insert = [
-                'productKey'      => $row[0],
+                'productKey'      => $prodKey,
                 'productPhoto'    => (file_exists($photoFn)) 
                                      ? base64_encode(file_get_contents($photoFn))
                                      : '',
@@ -90,6 +91,7 @@ try {
             $outputJs = $openJs . json_encode($insert, JSON_PRETTY_PRINT) . $closeJs;
             if ($writeJs) {
                 $jsFile->fwrite($outputJs);
+                $written++;
             }
             echo $outputJs;
             $processed++;
@@ -100,6 +102,7 @@ try {
 
     echo $processed . ' documents processed' . PHP_EOL;
     echo $inserted  . ' documents inserted' . PHP_EOL;
+    echo $written   . ' documents written' . PHP_EOL;
 
 } catch (Exception $e) {
     echo $e->getMessage();
