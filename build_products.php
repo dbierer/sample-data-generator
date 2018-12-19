@@ -1,75 +1,106 @@
 <?php
 /** 
- * builds "sweetscomplete.products" MongoDB collection
+ * builds $targetDb.$targetCollection MongoDB collection
  * WARNING: drops the collection before generating sample data
  */
 require __DIR__ . '/vendor/autoload.php';
 use Application\Client;
+use Application\LoremIpsum;
 
-// source files
-define('SOURCE_ISP', __DIR__ . '/isp.txt');
+define('LOREM_IPSUM', __DIR__ . '/lorem_ipsum.txt');
 
 // init vars
-$max = 300;    // target number of entries to generate
+$max        = 300;         // target number of entries to generate
+$inserted   = 0;
+$processed  = 0;
+$writeJs    = FALSE;    // set this TRUE to output JS file to perform inserts
+$writeBson  = FALSE; // set this TRUE to directly input into MongoDB database
+$sourceDb   = 'source_data';
+$targetDb   = 'sweetscomplete';
+$targetCollection = 'products';
+$targetJs   = __DIR__ . '/' . $targetDb . '_' . $targetCollection . '_insert.js';
+$loremIpsum = file(LOREM_IPSUM);
+$productsCsv = new SplFileObject($targetDb . '/products.csv', 'r');
 
-// set up mongodb client + collections
-$params = ['host' => '127.0.0.1'];
-$client = (new Client($params))->getClient();
-
-// build arrays from source files
-$firstNamesFemale = file(SOURCE_FIRST_NAMES_FEMALE);
-$firstNamesMale   = file(SOURCE_FIRST_NAMES_MALE);
-$surnames         = file(SOURCE_SURNAMES);
-$isps             = file(SOURCE_ISP);
-$isoCodes         = file(SOURCE_COUNTRIES);
-$socMedia         = ['GO' => 'google', 'TW' => 'twitter', 'FB' => 'facebook', 'LN' => 'line', 'SK' => 'skype','LI' => 'linkedin'];
-$street1          = ['Winding','Blue','Red','Green','Big','Little','Long','Short'];
-$street2          = ['Bough','Tree','Bridge','Creek','River','Bend','Mountain','Hill','Ditch','Gulch','Gully','Canyon','Mound','Woods','Ridge','Stream'];
-$street3          = ['Way','Street','Boulevard','Avenue','Drive','Road','Circle','Ride'];
-$buildingName     = NULL;
-$floor            = NULL;
-$roomNumber       = NULL;
-
-// build list of ISO codes
-$isoCodes = [];
-$cursor   = $client->source_data->post_codes->aggregate([['$group' => ['_id' => '$countryCode']]]);
-foreach ($cursor as $document) {
-    $isoCodes[] = $document->_id;
-}
-
-// empty out target collection
-$target = $client->sweetscomplete->customers;
-$target->drop();
-
-// build sample data
-$processed = 0;
-$inserted  = 0;
-for ($x = 100; $x < ($max + 100); $x++) {
-    
-
-    // set up document to be inserted
-    $insert['sku'] = $sku;            // unique key
-    $insert['MainProductInfo'] => [
-        'sku'         => $sku,
-        'title'       => $title,
-        'description' => $description,
-        'price'       => $price
-    ];
-    $insert['InventoryInfo'] => [
-        'unit'                => $unit,
-        'costPerUnit'         => $cost,
-        'numberOfUnitsOnHand' => $qoh
-    ];
-
-    if ($target->insertOne($insert)) {
-        $inserted++;
-    }
-    $processed++;
+// set up javascript
+if ($writeJs) {
+    $jsFile = new SplFileObject($targetJs, 'w');
+    $outputJs = 'conn = new Mongo();' . PHP_EOL
+              . 'db = conn.getDB("' . $targetDb . '");' . PHP_EOL
+              . 'db.' . $targetCollection . '.drop();' . PHP_EOL;
+    $openJs   = 'db.' . $targetCollection . '.insertOne(' . PHP_EOL;
+    $closeJs  = ');' . PHP_EOL;
+    $jsFile->fwrite($outputJs);
+    echo $outputJs;
 }
 
 try {
+
+    // set up mongodb client + collections
+    $params = ['host' => '127.0.0.1'];
+    $client = (new Client($params))->getClient();
+    $target = $client->$targetDb->$targetCollection;
+    $units  = ['box','tin','piece','item'];
+    $categories = ['cake','chocolate','cookie','donut','pie'];
+
+    // category, productKey, price
+    $headers = $productsCsv->fgetcsv();
+    
+    // build sample data
+    $count = 1;
+    while ($row = $productsCsv->fgetcsv()) {
+        // category,productKey,price,unit
+        if ($row && count($row) == 4) {
+            $prodKey = $row[1];
+            $photoFn = __DIR__ . '/' . $targetDb . '/' . $prodKey . '.png';
+            $skuKey  = array_search($row[0], $categories);
+            $sku     = strtoupper(substr($prodKey, 0, 3))
+                     . ($skuKey + 1) * 100 + $count++;
+            $description = LoremIpsum::generateIpsum($loremIpsum, rand(1,5));
+            var_dump($skuKey); continue;
+                            
+            // set up document to be inserted
+            $insert = [
+                'productKey'      => $row[0],
+                'productPhoto'    => (file_exists($photoFn)) 
+                                     ? base64_encode(file_get_contents($photoFn))
+                                     : '',
+                'MainProductInfo' => [
+                    'skuNumber'   => $sku,
+                    'category'    => $row[0],
+                    'title'       => ucwords(str_replace('_', ' ', $row[1])),
+                    'description' => $description,
+                    'price'       => $row[2],
+                ],
+                'InventoryInfo' => [
+                    'unit'                => $row[3],
+                    'costPerUnit'         => $row[2],
+                    'numberOfUnitsOnHand' => rand(0,999),
+                ],
+            ];
+                            
+            // write to MongoDB if flag enabled
+            if ($writeBson) {
+                if ($target->insertOne($insert)) {
+                    $inserted++;
+                }
+            }
+
+            // write to js file if flag enabled
+            $outputJs = $openJs . json_encode($insert, JSON_PRETTY_PRINT) . $closeJs;
+            if ($writeJs) {
+                $jsFile->fwrite($outputJs);
+            }
+            echo $outputJs;
+            $processed++;
+
+        }
+
+    }
+
     echo $processed . ' documents processed' . PHP_EOL;
     echo $inserted  . ' documents inserted' . PHP_EOL;
+
 } catch (Exception $e) {
     echo $e->getMessage();
 }

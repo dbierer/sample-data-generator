@@ -14,18 +14,30 @@ define('SOURCE_COUNTRIES', __DIR__ . '/iso_codes.txt');
 define('SOURCE_SURNAMES', __DIR__ . '/surnames.txt');
 define('SOURCE_FIRST_NAMES_MALE', __DIR__ . '/first_names_male.txt');
 define('SOURCE_FIRST_NAMES_FEMALE', __DIR__ . '/first_names_female.txt');
-define('PASSWORD_FILE', __DIR__ . '/passwords.csv');
 
 // init vars
-$max = 1000;        // target number of entries to generate
+$max = 300;         // target number of entries to generate
 $writeJs = TRUE;    // set this TRUE to output JS file to perform inserts
 $writeBson = FALSE; // set this TRUE to directly input into MongoDB database
 $sourceDb = 'source_data';
 $targetDb = 'sweetscomplete';
 $targetCollection = 'customers';
+$targetJs = __DIR__ . '/' . $targetDb . '_' . $targetCollection . '_insert.js';
 $processed = 0;
 $inserted  = 0;
-$pwdFile = new SplFileObject(PASSWORD_FILE, 'w');
+$pwdFile = new SplFileObject($targetDb . '_passwords' . '.csv', 'w');
+
+// set up javascript
+if ($writeJs) {
+    $jsFile = new SplFileObject($targetJs, 'w');
+    $outputJs = 'conn = new Mongo();' . PHP_EOL
+              . 'db = conn.getDB("' . $targetDb . '");' . PHP_EOL
+              . 'db.' . $targetCollection . '.drop();' . PHP_EOL;
+    $openJs   = 'db.' . $targetCollection . '.insertOne(' . PHP_EOL;
+    $closeJs  = ');' . PHP_EOL;
+    $jsFile->fwrite($outputJs);
+    echo $outputJs;
+}
 
 // build arrays from source files
 $firstNamesFemale = file(SOURCE_FIRST_NAMES_FEMALE);
@@ -56,10 +68,8 @@ try {
         $isoCodes[] = $document->_id;
     }
 
-    // empty out target collection
-    $target->drop();
-
-    // build sample data
+    // empty out target collection if write flag is set
+    if ($writeBson) $target->drop();
 
     // build sample data
     for ($x = 100; $x < ($max + 100); $x++) {
@@ -218,13 +228,20 @@ try {
                 $inserted++;
             }
         }
+
+        // write to js file if flag enabled
+        $outputJs = $openJs . json_encode($insert, JSON_PRETTY_PRINT) . $closeJs;
+        if ($writeJs) {
+            $jsFile->fwrite($outputJs);
+        }
+        echo $outputJs;
         $processed++;
+
     }
 
-    if ($writeBson) {
-        echo $processed . ' documents processed' . PHP_EOL;
-        echo $inserted  . ' documents inserted' . PHP_EOL;
-    }
+    echo $processed . ' documents processed' . PHP_EOL;
+    echo $inserted  . ' documents inserted' . PHP_EOL;
+
 } catch (Exception $e) {
     echo $e->getMessage();
 }
