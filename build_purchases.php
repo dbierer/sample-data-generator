@@ -3,6 +3,7 @@
  * builds $targetDb.purchases MongoDB collection
  * WARNING: drops the collection before generating sample data
  */
+define('DATE_FORMAT', 'Y-m-d H:i:s');
 require __DIR__ . '/vendor/autoload.php';
 use Application\Client;
 
@@ -58,27 +59,35 @@ try {
         // pull customer at random
         $skipProd = rand(0, $maxProd);
         if ($skipProd == 0) {
-            $prodDoc = $customers->findOne([],['projection' => ['MainProductInfo' => 1]]);
+            $prodDoc = $products->findOne([],['projection' => ['MainProductInfo' => 1]]);
         } else {
-            $prodDoc = $customers->findOne([],['projection' => ['MainProductInfo' => 1], 'skip' => $skipProd]);
+            $prodDoc = $products->findOne([],['projection' => ['MainProductInfo' => 1], 'skip' => $skipProd]);
         }
         
-        var_dump($prodDoc); exit;
-        
+        $qty = rand(1,999);
+        $extPrice = $qty * $prodDoc->MainProductInfo->price;
+        $purchDate = new DateTime('now');
+        $transId = sprintf('%8d%04d', date('Ymd'), $x);
+                
+        if ($x % 3 === 0) {
+            $purchDate->add(new DateInterval('P' . rand(1,300) . 'D'));
+        } else {
+            $purchDate->sub(new DateInterval('P' . rand(1,999) . 'D'));
+        }        
         // set up document to be inserted
         $insert = [
-            'transactionId' => '',
+            'transactionId' => $transId,
             'CustomerInfo' => [
-                'PrimaryContactInfo' => NULL,
-                'Address' => NULL,
+                'PrimaryContactInfo' => $custDoc->PrimaryContactInfo,
+                'Address' => $custDoc->Address,
             ],
             'ProductInfo' => [
-                'MainProductInfo' => NULL,
+                'MainProductInfo' => $prodDoc->MainProductInfo,
             ],
             'PurchaseInfo' => [
-                'dateOfPurchase'        => '',
-                'quantityPurchased'     => 0.00,
-                'extendedPrice'         => 0.00
+                'dateOfPurchase'        => $purchDate->format(DATE_FORMAT),
+                'quantityPurchased'     => $qty,
+                'extendedPrice'         => $extPrice
             ]
         ];
                         
