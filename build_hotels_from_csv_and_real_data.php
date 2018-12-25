@@ -14,7 +14,7 @@ define('SOURCE_FIRST_NAMES_MALE', __DIR__ . '/first_names_male.txt');
 define('SOURCE_FIRST_NAMES_FEMALE', __DIR__ . '/first_names_female.txt');
 
 // init vars
-$max       = 300;       // target number of entries to generate
+$max       = 500;       // target number of entries to generate
 $writeJs   = TRUE;      // set this TRUE to output JS file to perform inserts
 $writeBson = FALSE;     // set this TRUE to directly input into MongoDB database
 $sourceDb  = 'source_data';
@@ -43,6 +43,7 @@ $surnames         = file(SOURCE_SURNAMES);
 $firstNamesFemale = file(SOURCE_FIRST_NAMES_FEMALE);
 $isoCodes         = file(SOURCE_COUNTRIES);
 $isps             = file(SOURCE_ISP);
+$weightedIso      = ['US','CA','GB','AU','IN'];
 $socMedia         = ['GO' => 'google', 'TW' => 'twitter', 'FB' => 'facebook', 'LN' => 'line', 'SK' => 'skype','LI' => 'linkedin'];
 $name1            = ['Cozy','Riverside','Lakeside','Mountain','Rose','Garden','Valley','Castle','Sleepy','Amazing','Awesome','Romantic','Secluded','Peaceful','Restful','Quiet','Tranquil','Getaway','Take a Break','Famous','Destination','Travel','Voyage'];
 $street1          = ['Winding','Blue','Red','Green','Big','Little','Long','Short'];
@@ -50,7 +51,7 @@ $street2          = ['Bough','Tree','Bridge','Creek','River','Bend','Mountain','
 $street3          = ['Way','Street','Boulevard','Avenue','Drive','Road','Circle','Ride'];
 $bedType          = ['single', 'double', 'queen', 'king'];
 $breakfast        = ['included', 'extra'];
-$propertyType     = [ 'H' =>'Hotel', 'M' => 'Motel', 'SAPT' => 'Serviced Apartment', 'APT' => 'apartment', 'C' => 'Condo', 'BB' => 'Bed and Breakfast', 'HS' => 'Hostel', 'GH' => 'Guest House'];
+$propertyType     = ['H' =>'Hotel', 'M' => 'Motel', 'SAPT' => 'Serviced Apartments', 'APT' => 'Apartments', 'C' => 'Condo', 'BB' => 'Bed and Breakfast', 'HS' => 'Hostel', 'GH' => 'Guest House', 'I' => 'Inn', 'L' => 'Lodge', 'R' => 'Resort'];
 $refundable       = ['yes','no'];
 $replicaType      = ['primary', 'secondary'];
 $roomType         = ['standard', 'double', 'premium', 'VIP', 'family', 'suite'];
@@ -85,12 +86,16 @@ try {
     // empty out target collection if write flag is set
     if ($writeBson) $target->drop();
 
-    // pick country code
-    $isoCode = trim($isoCodes[array_rand($isoCodes)]);
-    
     // build sample data
     for ($x = 100; $x < ($max + 100); $x++) {
         
+        // pick country code
+        if (($x % 2) === 0) {
+            $isoCode = $weightedIso[array_rand($weightedIso)];
+        } else {
+            $isoCode = trim($isoCodes[array_rand($isoCodes)]);
+        }
+    
         //*** build PropertyInfo *********************************************************
         /*
         "PropertyInfo" : {
@@ -102,13 +107,13 @@ try {
          */        
         $brand = (($x % 3) === 0) ? FALSE : TRUE;
         if ($brand) {
-            $key   = array_keys($branded)[array_rand(array_keys($branded))];
-            $name  = $branded[$key][array_rand($branded[$key])];
+            $key   = trim(array_keys($branded)[array_rand(array_keys($branded))]);
+            $name  = trim($branded[$key][array_rand($branded[$key])]);
             $type  = (($x % 2) === 0) ? 'hotel' : 'motel';
             $brand = $key;
         } else {
             $type  = array_keys($propertyType)[array_rand(array_keys($propertyType))];
-            $name  = $name1[array_rand($name1)] . ' ' . ucwords($propertyType[$type]);
+            $name  = trim($name1[array_rand($name1)]) . ' ' . ucwords($propertyType[$type]);
             $brand = '';
         }
         $propertyInfo = [
@@ -275,13 +280,13 @@ try {
         }
         */
         $roomInfo = [];
-        for ($x = 0; $x < rand(2, 8); $x++ ) {
-            $roomInfo[$x]['roomType']     = $roomType[array_rand($roomType)];
-            $roomInfo[$x]['roomLocation'] = $roomType[array_rand($roomLocation)];
-            $roomInfo[$x]['price']        = (float) rand(20,1000);
-            for ($y = 0; $y < rand(1, 3); $y++ )
-                $roomInfo[$x]['bedType'][] = $bedType[array_rand($bedType)];
-            $roomInfo[$x]['breakfast']    = $breakfast[array_rand($breakfast)];
+        for ($y = 0; $y < rand(1, 4); $y++ ) {
+            $roomInfo[$y]['roomType']     = $roomType[array_rand($roomType)];
+            $roomInfo[$y]['roomLocation'] = $roomLocation[array_rand($roomLocation)];
+            $roomInfo[$y]['price']        = (float) rand(20,1000);
+            for ($z = 0; $z < rand(1, 3); $z++ )
+                $roomInfo[$y]['bedType'][] = $bedType[array_rand($bedType)];
+            $roomInfo[$y]['breakfast']    = $breakfast[array_rand($breakfast)];
         }
 
         // build data to write
