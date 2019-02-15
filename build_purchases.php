@@ -81,9 +81,7 @@ try {
                 'PrimaryContactInfo' => $custDoc->PrimaryContactInfo,
                 'Address' => $custDoc->Address,
             ],
-            'ProductInfo' => [
-                'MainProductInfo' => $prodDoc->MainProductInfo,
-            ],
+            'MainProductInfo' => $prodDoc->MainProductInfo,
             'PurchaseInfo' => [
                 'dateOfPurchase'        => $purchDate->format(DATE_FORMAT),
                 'quantityPurchased'     => $qty,

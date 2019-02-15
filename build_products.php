@@ -76,7 +76,7 @@ try {
                 'InventoryInfo' => [
                     'unit'                => $row[3],
                     'costPerUnit'         => $row[2],
-                    'numberOfUnitsOnHand' => rand(0,999),
+                    'unitsOnHand' => rand(0,999),
                 ],
             ];
                             
