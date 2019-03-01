@@ -1,6 +1,6 @@
 {
     "require": {
-        "mongodb/mongodb": "^1.4"
+        "mongodb/mongodb": "*"
     },
     "autoload" : {
         "psr-4" : {

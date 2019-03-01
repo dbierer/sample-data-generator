@@ -66,18 +66,14 @@ try {
                 'productPhoto'    => (file_exists($photoFn)) 
                                      ? base64_encode(file_get_contents($photoFn))
                                      : '',
-                'MainProductInfo' => [
-                    'skuNumber'   => $sku,
-                    'category'    => $row[0],
-                    'title'       => ucwords(str_replace('_', ' ', $row[1])),
-                    'description' => $description,
-                    'price'       => $row[2],
-                ],
-                'InventoryInfo' => [
-                    'unit'                => $row[3],
-                    'costPerUnit'         => $row[2],
-                    'unitsOnHand' => rand(0,999),
-                ],
+                'skuNumber'   => $sku,
+                'category'    => $row[0],
+                'title'       => ucwords(str_replace('_', ' ', $row[1])),
+                'description' => $description,
+                'price'       => $row[2],
+                'unit'        => $row[3],
+                'costPerUnit' => $row[2],
+                'unitsOnHand' => rand(0,999),
             ];
                             
             // write to MongoDB if flag enabled

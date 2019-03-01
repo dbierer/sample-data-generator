@@ -18,6 +18,7 @@ $sourceDb         = 'sweetscomplete';
 $targetDb         = 'sweetscomplete';
 $targetCollection = 'purchases';
 $targetJs   = __DIR__ . '/' . $targetDb . '_' . $targetCollection . '_insert.js';
+$alpha      = range('A','Z');
 
 // set up javascript
 if ($writeJs) {
@@ -41,52 +42,82 @@ try {
     $products  = $client->$sourceDb->products;
 
     // get max # customers
-    $maxCust = $customers->countDocuments();
+    $maxCust = $customers->count();
     // get max # products
-    $maxProd = $products->countDocuments();
-    
+    $maxProd = $products->count();
+
     // build sample data
     for ($x = 0; $x < $max; $x++) {
 
         // pull customer at random
         $skipCust = rand(0, $maxCust);
         if ($skipCust == 0) {
-            $custDoc = $customers->findOne([],['projection' => ['PrimaryContactInfo' => 1,'Address' => 1]]);
+            $custDoc = $customers->findOne();
         } else {
-            $custDoc = $customers->findOne([],['projection' => ['PrimaryContactInfo' => 1,'Address' => 1], 'skip' => $skipCust]);
+            $custDoc = $customers->findOne([], ['skip' => $skipCust]);
         }
-                
-        // pull customer at random
-        $skipProd = rand(0, $maxProd);
-        if ($skipProd == 0) {
-            $prodDoc = $products->findOne([],['projection' => ['MainProductInfo' => 1]]);
-        } else {
-            $prodDoc = $products->findOne([],['projection' => ['MainProductInfo' => 1], 'skip' => $skipProd]);
-        }
-        
-        $qty = rand(1,999);
-        $extPrice = $qty * $prodDoc->MainProductInfo->price;
-        $purchDate = new DateTime('now');
-        $transId = sprintf('%8d%04d', date('Ymd'), $x);
-                
+
+        if (!$custDoc) continue;
+                        
+        // create random number of products purchased
+        $purchDate = new DateTime('now');                
         if ($x % 3 === 0) {
             $purchDate->add(new DateInterval('P' . rand(1,300) . 'D'));
         } else {
             $purchDate->sub(new DateInterval('P' . rand(1,999) . 'D'));
         }        
+        $transId = $purchDate->format('Ymd') . $alpha[rand(0,26)] . $alpha[rand(0,26)] . sprintf('%04d', rand(0,9999));
+        $numProds = rand(1,6);
+        $extPrice = 0.00;
+        $productsPurchased = [];
+
+        for ($y = 0; $y < $numProds; $y++) {
+            
+            // pull product at random
+            $skipProd = rand(0, $maxProd);
+            if ($skipProd == 0) {
+                $prodDoc = $products->findOne();
+            } else {
+                $prodDoc = $products->findOne([], ['skip' => $skipProd]);
+            }
+            
+            if (!$prodDoc) continue;
+            
+            $qty = rand(1,999);
+            $extPrice += $qty * $prodDoc->price;
+
+            // {'productKey':'AAA111','qtyPurchased':111,'skuNumber':'11111','category':'AAA','title':'TEST AAA','price':1.11},
+            
+            $productsPurchased[] = ['productKey'   => $prodDoc->productKey, 
+                                    'qtyPurchased' => $qty, 
+                                    'skuNumber'    => $prodDoc->skuNumber,
+                                    'category'     => $prodDoc->category,
+                                    'title'        => $prodDoc->title,
+                                    'price'        => $prodDoc->price,
+            ];
+        }
+        
+        // calc extended price
+        
         // set up document to be inserted
         $insert = [
-            'transactionId' => $transId,
-            'CustomerInfo' => [
-                'PrimaryContactInfo' => $custDoc->PrimaryContactInfo,
-                'Address' => $custDoc->Address,
-            ],
-            'MainProductInfo' => $prodDoc->MainProductInfo,
-            'PurchaseInfo' => [
-                'dateOfPurchase'        => $purchDate->format(DATE_FORMAT),
-                'quantityPurchased'     => $qty,
-                'extendedPrice'         => $extPrice
-            ]
+            'transactionId'            => $transId,
+            'dateOfPurchase'           => $purchDate->format(DATE_FORMAT),
+            'extendedPrice'            => round($extPrice, 2),
+            'customerKey'              => $custDoc->customerKey,
+            'firstName'                => $custDoc->firstName,
+            'lastName'                 => $custDoc->lastName,
+            'phoneNumber'              => $custDoc->phoneNumber,
+            'email'                    => $custDoc->email,
+            'streetAddressOfBuilding'  => $custDoc->streetAddressOfBuilding,
+            'city'                     => $custDoc->city,
+            'stateProvince'            => $custDoc->stateProvince,
+            'locality'                 => $custDoc->locality,
+            'country'                  => $custDoc->country,
+            'postalCode'               => $custDoc->postalCode,
+            'latitude'                 => $custDoc->latitude,
+            'longitude'                => $custDoc->longitude,
+            'productsPurchased'        => $productsPurchased
         ];
                         
         // write to MongoDB if flag enabled

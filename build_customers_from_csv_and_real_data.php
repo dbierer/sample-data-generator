@@ -16,12 +16,12 @@ define('SOURCE_FIRST_NAMES_MALE', __DIR__ . '/first_names_male.txt');
 define('SOURCE_FIRST_NAMES_FEMALE', __DIR__ . '/first_names_female.txt');
 
 // init vars
-$max       = 600;         // target number of entries to generate
-$writeJs   = TRUE;    // set this TRUE to output JS file to perform inserts
-$writeBson = FALSE; // set this TRUE to directly input into MongoDB database
+$max       = 600;       // target number of entries to generate
+$writeJs   = TRUE;      // set this TRUE to output JS file to perform inserts
+$writeBson = FALSE;     // set this TRUE to directly input into MongoDB database
 $sourceDb  = 'source_data';
-$targetDb  = 'booksomething';
-$targetCol = 'user';
+$targetDb  = 'sweetscomplete';
+$targetCol = 'customers';
 $targetJs  = __DIR__ . '/' . $targetDb . '_' . $targetCol . '_insert.js';
 $pwdFile   = new SplFileObject($targetDb . '_' . $targetCol . '_passwords.csv', 'w');
 $processed = 0;
@@ -102,7 +102,7 @@ try {
         $roomNumber   = (rand(1,10) === 1) ? strtoupper(bin2hex(random_bytes(1))) : NULL;
 
         // do a count on 'post_codes' documents for this $isoCode
-        $count = $source->post_codes->countDocuments(['countryCode' => $isoCode]);
+        $count = $source->post_codes->count(['countryCode' => $isoCode]);
         if ($count == 0) continue;
         
         // generate a random number between 1 and count
@@ -165,7 +165,8 @@ try {
         //*** Build PrimaryContactInfo ************************************************
         // decide gender
         $gender = ((($x + rand(1,99)) % 2) == 0) ? 'M' : 'F';
-
+        $gender = ($x % 80 == 0) ? 'X' : $gender;               // account for "other"
+        
         // randomly pick first and last names
         $first = ($gender == 'F') 
             ? $firstNamesFemale[array_rand($firstNamesFemale)]
@@ -192,10 +193,11 @@ try {
             'lastName'    => $last,
             'phoneNumber' => $phone,
             'email'       => $email,
-            'GeoSpatialInfo' => [
-                'latitude'  => $document->latitude,
-                'longitude' => $document->longitude
-            ]
+        ];
+        
+        $geoSpatialInfo = [
+            'latitude'  => $document->latitude,
+            'longitude' => $document->longitude
         ];
         //************************************************************************
         
@@ -228,7 +230,7 @@ try {
         $year = date('Y') - rand(16, 89);
         $month = rand(1,12);
         $day   = ($month == 2) ? rand(1,28) : rand(1,30);
-        $dob   = $year . '-' . $month . '-' . $day;
+        $dob   = sprintf('%4d-%02d-%02d', $year, $month, $day);
         $otherInfo = [
             'gender' => $gender,
             'dateOfBirth' => $dob
@@ -243,7 +245,7 @@ try {
         $pwdFile->fputcsv([$email,$username,$password]);        
         $loginInfo = [
             'username' => $username, 
-            'password' => password_hash($password)
+            'password' => password_hash($password, PASSWORD_DEFAULT)
         ];
         //************************************************************************
         
@@ -265,20 +267,17 @@ try {
 
         //************************************************************************
         // set up document to be inserted
-        $insert = [
-            // stand alone fields
-            'email'        => $email,            // unique key
-            'userType'     => $userType,
-            'businessName' => $businessName,
-            'favorites'    => [],
-            // objects
-            'PrimaryContactInfo'   => $primaryContactInfo,
-            'SecondaryContactInfo' => $secondaryContactInfo,
-            'OtherInfo'            => $otherInfo,
-            'LoginInfo'            => $loginInfo,
-            'Address'              => $address,
-        ];
-
+        $custKey = strtoupper(substr($first, 0, 4) . substr($last, 0, 4)) . substr($phone, -4);
+        $insert = array_merge(
+            ['customerKey' => $custKey],
+            $primaryContactInfo,
+            $address,
+            $geoSpatialInfo,
+            $loginInfo,
+            $secondaryContactInfo,
+            $otherInfo
+        );
+        
         // write to MongoDB if flag enabled
         if ($writeBson) {
             if ($target->insertOne($insert)) {
