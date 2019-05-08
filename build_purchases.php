@@ -66,7 +66,9 @@ try {
         } else {
             $purchDate->sub(new DateInterval('P' . rand(1,999) . 'D'));
         }        
-        $transId = $purchDate->format('Ymd') . $alpha[rand(0,26)] . $alpha[rand(0,26)] . sprintf('%04d', rand(0,9999));
+        
+        // create transaction ID + initialize other product information
+        $transId = $purchDate->format('Ymd') . strtoupper($custDoc->firstName[0] . $custDoc->lastName[0]) . sprintf('%04d', rand(0,9999));
         $numProds = rand(1,6);
         $extPrice = 0.00;
         $productsPurchased = [];
@@ -86,14 +88,15 @@ try {
             $qty = rand(1,999);
             $extPrice += $qty * $prodDoc->price;
 
-            // {'productKey':'AAA111','qtyPurchased':111,'skuNumber':'11111','category':'AAA','title':'TEST AAA','price':1.11},
+            // 'AAA111' : {'productKey':'AAA111','qtyPurchased':111,'skuNumber':'11111','category':'AAA','title':'TEST AAA','price':1.11},
             
-            $productsPurchased[] = ['productKey'   => $prodDoc->productKey, 
-                                    'qtyPurchased' => $qty, 
-                                    'skuNumber'    => $prodDoc->skuNumber,
-                                    'category'     => $prodDoc->category,
-                                    'title'        => $prodDoc->title,
-                                    'price'        => $prodDoc->price,
+            $productsPurchased[$prodDoc->productKey] = [
+                'productKey'   => $prodDoc->productKey, 
+                'qtyPurchased' => $qty, 
+                'skuNumber'    => $prodDoc->skuNumber,
+                'category'     => $prodDoc->category,
+                'title'        => $prodDoc->title,
+                'price'        => $prodDoc->price,
             ];
         }
         
@@ -103,7 +106,7 @@ try {
         $insert = [
             'transactionId'            => $transId,
             'dateOfPurchase'           => $purchDate->format(DATE_FORMAT),
-            'extendedPrice'            => round($extPrice, 2),
+            'extendedPrice'            => $extPrice,
             'customerKey'              => $custDoc->customerKey,
             'firstName'                => $custDoc->firstName,
             'lastName'                 => $custDoc->lastName,

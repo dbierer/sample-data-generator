@@ -1,12 +1,12 @@
 <?php
 namespace Application;
 
-use Throwable;
 
 /**
  * Builds tables from source data files
  */
 
+use Throwable;
 use Exception;
 use SplFileObject;
 use MongoDB\Collection;
@@ -16,11 +16,11 @@ class Build
     const ALLOWED_DELIMS = ",\t";
     const ERROR_DELIMS = 'ERROR: only comma (",") or tab ("\\t") allowed for delimiters';
     const ERROR_FILE   = 'ERROR: source file not found';
-    const ERROR_TARGET = 'ERROR: target must be an instance of MongoDB\Collection';    
-    
+    const ERROR_TARGET = 'ERROR: target must be an instance of MongoDB\Collection';
+
     /**
      * Creates MongoDB collection from source text file
-     * 
+     *
      * @param MongoDB\Collection $target
      * @param string $sourceFile           // comma or tab delimited text file
      * @param string $delimiter            // "," or "\t"
@@ -38,44 +38,28 @@ class Build
         if (!file_exists($sourceFile)) {
             throw new Exception(self::ERROR_FILE);
         }
-        
+
         // init vars
         $output = '';
 
         // wipe out exclusion file
         if (file_exists($exclusionFile)) unlink($exclusionFile);
-        
+
         // set up delimited file processing
         $delimitedFile = new SplFileObject($sourceFile, 'r');
-        $split = function ($line) use ($delimiter) { return explode($delimiter, trim($line)); };
-        $headers = $split($delimitedFile->fgets());
-        $headCount = count($headers);
-        
+        $extension     = $delimitedFile->getExtension();
+
         // empty out collection
         $target->drop();
 
         // iterate through file
         try {
-            $total = 0;
             $inserted = 0;
-            while ($line = $delimitedFile->fgets()) {
-                $insert = $split(trim($line));
-                if (count($insert) !== $headCount) {
-                    if ($fix) {
-                        $data = $fix($headers, $insert);
-                        if ($target->insertOne($data)) {
-                            $inserted++;
-                        }
-                    } else {
-                        // write line to exclusion file
-                        file_put_contents($exclusionFile, $line, FILE_APPEND);
-                    }
-                } else {
-                    if ($target->insertOne(array_combine($headers, $insert))) {
-                        $inserted++;
-                    }
-                }
-                $total++;
+            $headers  = [];
+            if ($extension == 'csv') {
+                $total = self::parseCsvFile($delimitedFile, $target, $delimiter, $exclusionFile, $headers, $inserted);
+            } else {
+                $total = self::parseTextFile($delimitedFile, $target, $delimiter, $exclusionFile, $headers, $inserted);
             }
             $output .= 'Total documents processed: ' . $total . PHP_EOL;
             $output .= 'Total documents inserted:  ' . $inserted . PHP_EOL;
@@ -83,5 +67,54 @@ class Build
             $output .= $e->getMessage() . PHP_EOL;
         }
         return $output;
+    }
+    protected static function parseTextFile($delimitedFile, $target, $delimiter, $exclusionFile, &$headers, &$inserted)
+    {
+        $total = 0;
+        $split = function ($line) use ($delimiter) { return explode($delimiter, trim($line)); };
+        $headers = $split($delimitedFile->fgets());
+        $headCount = count($headers);
+        while ($line = $delimitedFile->fgets()) {
+            $insert = $split(trim($line));
+            if (count($insert) !== $headCount) {
+                if ($fix) {
+                    $data = $fix($headers, $insert);
+                    if ($target->insertOne($data)) {
+                        $inserted++;
+                    }
+                } else {
+                    // write line to exclusion file
+                    file_put_contents($exclusionFile, implode(',', $insert) . PHP_EOL, FILE_APPEND);
+                }
+            } else {
+                try {
+                    if ($target->insertOne(array_combine($headers, $insert))) {
+                        $inserted++;
+                    }
+                } catch (Exception $e) {
+                    error_log($e->getMessage());
+                }
+            }
+            $total++;
+        }
+        return $total;
+    }
+    protected static function parseCsvFile($delimitedFile, $target, $delimiter, $exclusionFile, &$headers, &$inserted)
+    {
+        $total = 0;
+        $headers = $delimitedFile->fgetcsv();
+        $headCount = count($headers);
+        while ($line = $delimitedFile->fgetcsv()) {
+            if (count($line) !== $headCount) {
+                // write line to exclusion file
+                file_put_contents($exclusionFile, implode(',', $line) . PHP_EOL, FILE_APPEND);
+            } else {
+                if ($target->insertOne(array_combine($headers, $line))) {
+                    $inserted++;
+                }
+            }
+            $total++;
+        }
+        return $total;
     }
 }

@@ -1,9 +1,9 @@
 <?php
-/** 
+/**
  * builds $targetDb.$targetCol MongoDB collection
  * WARNING: drops the collection before generating sample data
  * stores password hashed BCRYPT
- * writes plain text email + username + password to CSV file PASSWORD_FILE
+ * all passwords are "password";  if you want random, set $password = 'RANDOM'
  */
 require __DIR__ . '/vendor/autoload.php';
 use Application\Client;
@@ -16,12 +16,13 @@ define('SOURCE_FIRST_NAMES_MALE', __DIR__ . '/first_names_male.txt');
 define('SOURCE_FIRST_NAMES_FEMALE', __DIR__ . '/first_names_female.txt');
 
 // init vars
-$max       = 600;       // target number of entries to generate
-$writeJs   = TRUE;      // set this TRUE to output JS file to perform inserts
-$writeBson = FALSE;     // set this TRUE to directly input into MongoDB database
+$max       = 100;           // target number of entries to generate
+$writeJs   = TRUE;          // set this TRUE to output JS file to perform inserts
+$writeBson = FALSE;         // set this TRUE to directly input into MongoDB database
+$password  = 'password';    // set this to "RANDOM" if you want random passwords generated
 $sourceDb  = 'source_data';
-$targetDb  = 'sweetscomplete';
-$targetCol = 'customers';
+$targetDb  = 'booksomeplace';
+$targetCol = 'partners';
 $targetJs  = __DIR__ . '/' . $targetDb . '_' . $targetCol . '_insert.js';
 $pwdFile   = new SplFileObject($targetDb . '_' . $targetCol . '_passwords.csv', 'w');
 $processed = 0;
@@ -46,15 +47,16 @@ $firstNamesMale   = file(SOURCE_FIRST_NAMES_MALE);
 $surnames         = file(SOURCE_SURNAMES);
 $isps             = file(SOURCE_ISP);
 $isoCodes         = file(SOURCE_COUNTRIES);
+$alpha            = range('a','z');
+$suffixes         = ['MD','DDS','PhD','BS','MSD','LSD'];
 $weightedIso      = ['US','CA','GB','AU','IN'];
-$socMedia         = ['GO' => 'google', 'TW' => 'twitter', 'FB' => 'facebook', 'LN' => 'line', 'SK' => 'skype','LI' => 'linkedin'];
+$socMedia         = ['google','twitter','facebook','line','skype','linkedin'];
 $street1          = ['Winding','Blue','Red','Green','Big','Little','Long','Short'];
 $street2          = ['Bough','Tree','Bridge','Creek','River','Bend','Mountain','Hill','Ditch','Gulch','Gully','Canyon','Mound','Woods','Ridge','Stream'];
 $street3          = ['Way','Street','Boulevard','Avenue','Drive','Road','Circle','Ride'];
 $business1        = ['Friendly','Serious','Industrious','Fat Cats'];
 $business2        = ['Industries','Associates','Trust','Business'];
 $business3        = ['Inc','Ltd','Company','LLC'];
-$type             = ['customer','partner','admin'];
 $buildingName     = NULL;
 $floor            = NULL;
 $roomNumber       = NULL;
@@ -91,9 +93,9 @@ try {
 
         //*** Build Address ************************************************
         // build street address
-        $streetAddr = rand(1,9999) . ' ' 
-                 . $street1[array_rand($street1)] . ' ' 
-                 . $street2[array_rand($street2)] . ' ' 
+        $streetAddr = rand(1,9999) . ' '
+                 . $street1[array_rand($street1)] . ' '
+                 . $street2[array_rand($street2)] . ' '
                  . $street3[array_rand($street3)];
 
         // build buildingName, floor, etc.
@@ -104,10 +106,10 @@ try {
         // do a count on 'post_codes' documents for this $isoCode
         $count = $source->post_codes->count(['countryCode' => $isoCode]);
         if ($count == 0) continue;
-        
+
         // generate a random number between 1 and count
         $goTo  = rand(1, $count);
-        
+
         // iterate until number is reached
         $document = $source->post_codes->findOne(['countryCode' => $isoCode],['skip' => $goTo]);
         if (!$document) continue;
@@ -119,7 +121,7 @@ try {
         $longitude = $document->longitude;
         $stateProv = NULL;
         $locality  = NULL;
-        
+
         // will need to do a switch statement to get state/province, etc.
         switch ($isoCode) {
             case 'GB' :
@@ -137,7 +139,7 @@ try {
                         $stateProv = $document->adminName1;
                     }
                 }
-                break;                    
+                break;
                 // do nothing
         }
         // locality
@@ -149,26 +151,28 @@ try {
             $locality = $document->adminName1;
         }
         $address = [
-            'streetAddressOfBuilding' => $streetAddr,
-            'buildingName'            => $buildingName,
-            'floor'                   => $floor,
-            'roomApartmentCondoNumber'=> $roomNumber,
-            'city'                    => $city,
-            'stateProvince'           => $stateProv,
-            'locality'                => $locality,
-            'country'                 => $isoCode,
-            'postalCode'              => $postCode
+            'streetAddress'   => $streetAddr,
+            'buildingName'    => $buildingName,
+            'floor'           => $floor,
+            'roomAptCondoFlat'=> $roomNumber,
+            'city'            => $city,
+            'stateProvince'   => $stateProv,
+            'locality'        => $locality,
+            'country'         => $isoCode,
+            'postalCode'      => $postCode,
+            'latitude'        => $document->latitude,
+            'longitude'       => $document->longitude
         ];
         //************************************************************************
 
 
-        //*** Build PrimaryContactInfo ************************************************
+        //*** Build Contact ******************************************************
         // decide gender
         $gender = ((($x + rand(1,99)) % 2) == 0) ? 'M' : 'F';
         $gender = ($x % 80 == 0) ? 'X' : $gender;               // account for "other"
-        
+
         // randomly pick first and last names
-        $first = ($gender == 'F') 
+        $first = ($gender == 'F')
             ? $firstNamesFemale[array_rand($firstNamesFemale)]
             : $firstNamesMale[array_rand($firstNamesMale)];
         $last  = $surnames[array_rand($surnames)];
@@ -178,49 +182,75 @@ try {
         // username
         $username = strtolower(substr($first, 0, 1) . substr($last, 0, 7));
 
-        // build email addresses
-        $email = $username . $x . '@' . trim($isps[array_rand($isps)]) . '.com';
+        // build primary email address
+        $email = $username . $x . '@' . strtolower(trim($isps[array_rand($isps)])) . '.com';
 
         // create phone number
         $countryData = $source->iso_country_codes->findOne(['ISO2' => $isoCode]);
-        $dialCode = (isset($countryData->dialingCode) && $countryData->dialingCode) 
-                  ? '+' . $countryData->dialingCode . '-' 
+        $dialCode = (isset($countryData->dialingCode) && $countryData->dialingCode)
+                  ? '+' . $countryData->dialingCode . '-'
                   : '';
         $phone  = $dialCode . sprintf('%d-%03d-%04d', $x, rand(0,999), rand(0,9999));
 
-        $primaryContactInfo = [
-            'firstName'   => $first,
-            'lastName'    => $last,
-            'phoneNumber' => $phone,
-            'email'       => $email,
+        // pick social media at random
+        if ($x % 10) {
+            $soc1 = '';     // no social media
+        } else {
+            $soc1   = $socMedia[array_rand($socMedia)];
+        }
+
+        // title
+        $title = NULL;
+        $suffix = NULL;
+        if ($x % 3) {
+            if ($gender == 'M') $title = 'Mr';
+            else $title = 'Ms';
+        } else {
+            if (rand(0,19) === 0 ) {
+                $title = 'Dr';
+                $suffix = $suffixes[array_rand($suffixes)];
+            }
+        }
+
+        $name = [
+            'title'  => $title,
+            'first'  => $first,
+            'middle' => ($x % 3) ? strtoupper($alpha[rand(0,25)]) : NULL,
+            'last'   => $last,
+            'suffix' => $suffix,
         ];
-        
-        $geoSpatialInfo = [
-            'latitude'  => $document->latitude,
-            'longitude' => $document->longitude
+
+        $contact = [
+            'phone'    => $phone,
+            'email'    => $email,
+            'socMedia' => ($soc1) ? [$soc1 => $username . '@' . $soc1 . '.com'] : NULL,
         ];
+
         //************************************************************************
-        
+
 
         //*** Build SecondaryContactInfo ************************************************
         // create secondary phone numbers
         $phone2 = [];
         $email2 = [];
         for ($y = 0; $y < rand(0,3); $y++)
-            $email2[] = $username . '@' . trim($isps[array_rand($isps)]) . '.net';    
+            $email2[] = $username . '@' . strtolower(trim($isps[array_rand($isps)])) . '.net';
         for ($y = 0; $y < rand(0,3); $y++)
-            $phone2[] = $dialCode . sprintf('%d-%03d-%04d', rand(0,999), rand(0,999), rand(0,9999));        
+            $phone2[] = $dialCode . sprintf('%d-%03d-%04d', rand(0,999), rand(0,999), rand(0,9999));
         // choose social media at random
         $soc = [];
-        foreach ($socMedia as $key => $value) {
-            if (rand(1,4) == 1) {
-                $soc[$key] = ['label' => $value, 'url' => 'https://' . $value . '.com/' . $username];
+        if ($soc1) {
+            foreach ($socMedia as $value) {
+                if (rand(1,4) == 1) {
+                    $soc[$value] = $username . '@' . $value . '.com';
+                }
             }
         }
-        $secondaryContactInfo = [
-            'secondaryPhoneNumbers'   => $phone2,
-            'secondaryEmailAddresses' => $email2,
-            'socialMedia'             => $soc,
+
+        $otherContact = [
+            'emails'       => $email2,
+            'phoneNumbers' => $phone2,
+            'socMedias'    => $soc
         ];
         //************************************************************************
 
@@ -231,53 +261,51 @@ try {
         $month = rand(1,12);
         $day   = ($month == 2) ? rand(1,28) : rand(1,30);
         $dob   = sprintf('%4d-%02d-%02d', $year, $month, $day);
+
         $otherInfo = [
-            'gender' => $gender,
+            'gender'      => $gender,
             'dateOfBirth' => $dob
-        ];        
+        ];
         //************************************************************************
 
 
         //*** Build LoginInfo ************************************************
-        // create password
-        $password = base64_encode(random_bytes(8));        
         // write plain text email + username + password to CSV file
-        $pwdFile->fputcsv([$email,$username,$password]);        
-        $loginInfo = [
-            'username' => $username, 
-            'password' => password_hash($password, PASSWORD_DEFAULT)
+        // NOTE: all passwords are "password"
+        $pwdFile->fputcsv([$email,$username,$password]);
+
+        if ($password == 'RANDOM') {
+            $password = base64_encode(random_bytes(6));
+        }
+        $login = [
+            'username' => $username,
+            'oauth2'   => ($soc1) ? $username . '@' . $soc1 . '.com' : NULL,
+            'password' => password_hash($password, PASSWORD_BCRYPT),
         ];
         //************************************************************************
-        
+
 
         //*** Build Stand Alone Fields ************************************************
-        $businessName = '';
-        if ($x == 1) {
-            $userType = 'admin';
-        } elseif (($x % 50) === 0) {
-            $userType = 'partner';
-            $businessName = $business1[array_rand($business1)]
-                          . ' ' . $business2[array_rand($business2)]
-                          . ' ' . $business3[array_rand($business3)];
-        } else {
-            $userType = 'customer';
-        }        
+        $businessName = $business1[array_rand($business1)]
+                      . ' ' . $business2[array_rand($business2)]
+                      . ' ' . $business3[array_rand($business3)];
         //************************************************************************
 
 
         //************************************************************************
         // set up document to be inserted
         $custKey = strtoupper(substr($first, 0, 4) . substr($last, 0, 4)) . substr($phone, -4);
-        $insert = array_merge(
-            ['customerKey' => $custKey],
-            $primaryContactInfo,
-            $address,
-            $geoSpatialInfo,
-            $loginInfo,
-            $secondaryContactInfo,
-            $otherInfo
-        );
-        
+        $insert = [
+            'customerKey' => $custKey,
+            'name'        => $name,
+            'address'     => $address,
+            'contact'     => $contact,
+            'login'       => $login,
+            'otherContact'=> $otherContact,
+            'otherInfo'   => $otherInfo,
+            'login'       => $login
+        ];
+
         // write to MongoDB if flag enabled
         if ($writeBson) {
             if ($target->insertOne($insert)) {
@@ -303,3 +331,49 @@ try {
 } catch (Exception $e) {
     echo $e->getMessage();
 }
+
+// here is the target data structure:
+/*
+{
+    "customerKey"  : "00000000",
+    "name" : {
+        "title"  : "Mr",
+        "first"  : "Fred",
+        "middle" : "Folsom",
+        "last"   : "Flintstone",
+        "suffix" : "CM"
+    },
+    "address"     : {
+        "streetAddress"    : "123 Main Street",
+        "buildingName"     : "",
+        "floor"            : "",
+        "roomAptCondoFlat" : "",
+        "city"             : "Bedrock",
+        "stateProvince"    : "ZZ",
+        "locality"         : "Unknown",
+        "country"          : "None",
+        "postalCode"       : "00000",
+        "latitude"         : "+111.111",
+        "longitude"        : "-111.111"
+    },
+    "contact" : {
+        "email"    : "fred@slate.gravel.com",
+        "phone"    : "+0-000-000-0000",
+        "socMedia" : {"google" : "freddy@gmail.com"}
+    },
+    "otherContact" : {
+        "emails"       : ["betty@flintstone.com", "freddy@flintstone.com"],
+        "phoneNumbers" : [{"home" : "000-000-0000"}, {"work" : "111-111-1111"}],
+        "socMedias"    : [{"google" : "freddy@gmail.com"}, {"skype" : "fflintstone"}]
+    },
+    "otherInfo" : {
+        "gender"      : "M",
+        "dateOfBirth" : "0000-01-01"
+    },
+    "login" : {
+        "username" : "fred",
+        "oauth2"   : "freddy@gmail.com",
+        "password" : "abcdefghijklmnopqrstuvwxyz"
+    }
+}
+*/

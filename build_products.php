@@ -70,10 +70,10 @@ try {
                 'category'    => $row[0],
                 'title'       => ucwords(str_replace('_', ' ', $row[1])),
                 'description' => $description,
-                'price'       => $row[2],
+                'price'       => (float) $row[2],
                 'unit'        => $row[3],
-                'costPerUnit' => $row[2],
-                'unitsOnHand' => rand(0,999),
+                'costPerUnit' => (float) $row[2] * .9,
+                'unitsOnHand' => (int) rand(0,999),
             ];
                             
             // write to MongoDB if flag enabled
