@@ -22,7 +22,7 @@ $max       = 500;       // target number of entries to generate
 $writeJs   = TRUE;      // set this TRUE to output JS file to perform inserts
 $writeBson = FALSE;     // set this TRUE to directly input into MongoDB database
 $sourceDb  = 'source_data';
-$targetDb  = 'booksomething';
+$targetDb  = 'booksomeplace';
 $targetCol = 'properties';
 $targetJs  = __DIR__ . '/' . $targetDb . '_' . $targetCol . '_insert.js';
 $processed = 0;
@@ -50,13 +50,16 @@ try {
     $source    = $client->$sourceDb;
 
     // build list of partner keys
-    $partnerKeys = $makeFake->buildPartnerKeys($client->$targetDb);
+    $partnerKeys = $makeFake->buildPartnerKeys($client->$targetDb->partners);
+    if (!$partnerKeys) throw new Exception('ERROR: partner keys');
 
     // build list of customer keys
-    $customerKeys = $makeFake->buildCustomerKeys($client->$targetDb);
+    $customerKeys = $makeFake->buildCustomerKeys($client->$targetDb->customers);
+    if (!$customerKeys) throw new Exception('ERROR: customer keys');
 
     // build list of ISO codes
     $isoCodes = $makeFake->buildIsoCodes($source->post_codes);
+    if (!$isoCodes) throw new Exception('ERROR: ISO codes');
 
     // empty out target collection if write flag is set
     if ($writeBson) $target->drop();
@@ -82,15 +85,15 @@ try {
         $name = $makeFake->makeName($x);
 
         //*** Build Contact ******************************************************
-        $contact = $makeFake->makeContact($x, $source->iso_country_codes);
+        $contact = $makeFake->makeContact($x, $source->iso_country_codes, $isoCode);
 
         //*** Build RoomTypes *********************************************************
         $rooms = $makeFake->makeRoomTypes();
 
         //*** Build Reviews *********************************************************
-        $reviews = $makeFake->makeReviews($customerKeys);
+        $reviews = $makeFake->makeReviews($x);
 
-        // generate the rating
+        // calculate the overall rating
         $rating = 0;
         $numReviews = 0;
         foreach ($reviews as $review) {
@@ -98,19 +101,33 @@ try {
             foreach ($review as $item)
                 $rating += (int) $item;
         }
-        $rating = ($rating / $numReviews) / 4;
+        $rating = ($rating) ? ($rating / $numReviews) / 4 : $rating;
+
+        // generate weighted total booked
+        switch (TRUE) {
+            case ($x % 7 === 0) :
+                $totalBooked = rand(100,9999);
+                break;
+            case ($x % 3 === 0) :
+                $totalBooked = rand(10,999);
+                break;
+            default :
+                $totalBooked = rand(1,99);
+        }
+
         // build data to write
         $insert = [
-            'propertyKey' => $propInfo,
+            'propertyKey' => strtoupper(substr($makeFake->makePropName(), 0, 4)) . rand(1000, 9999),
             'partnerKey'  => $makeFake->partnerKeys[array_rand($makeFake->partnerKeys)],
-            'propName'    => $propName,
+            'propName'    => $makeFake->makePropName(),
             'propInfo'    => $propInfo,
             'address'     => $location,
             'contactName' => $name,
             'contactInfo' => $contact,
             'rooms'       => $rooms,
             'reviews'     => $reviews,
-            'rating'      => $rating
+            'rating'      => $rating,
+            'totalBooked' => $totalBooked
         ];
 
         // write to MongoDB if flag enabled

@@ -3,28 +3,38 @@ namespace Application;
 
 use Exception;
 use SplFileObject;
+use DateTime;
+use DateInterval;
 
 class MakeFake
 {
-    const ERROR_NAME = 'ERROR: must run "makeName()" before running "makeContact()"';
+    const ERROR_NAME       = 'ERROR: must run "makeName()" before running "makeContact()" or "makeLoginInfo()"';
+    const ERROR_CONTACT    = 'ERROR: must run "makeContact()" before running "makeLoginInfo()"';
+    const DEFAULT_PASSWORD = 'password';
 
     // source data
-    public $street1 = ['Winding','Blue','Red','Green','Big','Little','Long','Short'];
-    public $street2 = ['Bough','Tree','Bridge','Creek','River','Bend','Mountain','Hill','Ditch','Gulch','Gully','Canyon','Mound','Woods','Ridge','Stream'];
-    public $street3 = ['Way','Street','Boulevard','Avenue','Drive','Road','Circle','Ride'];
-    public $weightedIso      = ['US','CA','GB','AU','IN'];
-    public $socMedia         = ['google','twitter','facebook','line','skype','linkedin'];
-    public $propName1        = ['Cozy','Riverside','Lakeside','Mountain','Rose','Garden','Valley','Castle','Sleepy','Amazing','Awesome','Romantic','Secluded','Peaceful','Restful','Quiet','Tranquil','Getaway','Take a Break','Famous','Destination','Travel','Voyage'];
-    public $propName2        = ['Lodge','Hotel','Inn','House','Stay','Resort','Destination','Keep','Hall'];
-    public $bedType          = ['single', 'double', 'queen', 'king'];
-    public $propertyType     = ['hotel','motel','inn','guest house','hostel','resort','serviced apartment','condo','b & b','lodge'];
-    public $refundable       = ['yes','no'];
-    public $replicaType      = ['primary', 'secondary'];
-    public $roomType         = ['standard', 'double', 'premium', 'VIP', 'family', 'suite'];
-    public $roomView         = ['city', 'pool', 'river', 'lake', 'mountain', 'garden', 'pleasant', 'spectacular', 'park'];
-    public $facilityType     = ['outdoor pool','indoor pool','free parking','WiFi','fitness center','business center','pharmacy','sauna','jacuzzi','buffet breakfast'];
+    public $street1       = ['Winding','Blue','Red','Green','Big','Little','Long','Short'];
+    public $street2       = ['Bough','Tree','Bridge','Creek','River','Bend','Mountain','Hill','Ditch','Gulch','Gully','Canyon','Mound','Woods','Ridge','Stream'];
+    public $street3       = ['Way','Street','Boulevard','Avenue','Drive','Road','Circle','Ride'];
+    public $weightedIso   = ['US','CA','GB','AU','IN'];
+    public $socMedia      = ['google','twitter','facebook','line','skype','linkedin'];
+    public $propName1     = ['Cozy','Riverside','Lakeside','Mountain','Rose','Garden','Valley','Castle','Sleepy','Amazing','Awesome','Romantic','Secluded','Peaceful','Restful','Quiet','Tranquil','Getaway','Take a Break','Famous','Destination','Travel','Voyage'];
+    public $propName2     = ['Lodge','Hotel','Inn','House','Stay','Resort','Destination','Keep','Hall'];
+    public $bedType       = ['single', 'double', 'queen', 'king'];
+    public $propertyType  = ['hotel','motel','inn','guest house','hostel','resort','serviced apartment','condo','b & b','lodge'];
+    public $refundable    = ['yes','no'];
+    public $replicaType   = ['primary', 'secondary'];
+    public $roomType      = ['standard', 'double', 'premium', 'VIP', 'family', 'suite'];
+    public $roomView      = ['city', 'pool', 'river', 'lake', 'mountain', 'garden', 'pleasant', 'spectacular', 'park'];
+    public $facilityType  = ['outdoor pool','indoor pool','free parking','WiFi','fitness center','business center','pharmacy','sauna','jacuzzi','buffet breakfast'];
+    public $checkout      = [11, 12, 13, 12, 14, 12];
+    public $lengthStay    = [1, 2, 3, 4, 5, 7, 1, 2, 3, 4, 5, 7, 14, 30];
+    public $rsvStatus     = ['pending','confirmed','cancelled'];
+    public $payStatus     = ['pending','confirmed','refunded'];
+    public $suffixes      = ['II','III','Jr','Sr'];
 
     // built in __construct
+    public $alpha            = [];
     public $firstNamesMale   = [];
     public $surnames         = [];
     public $firstNamesFemale = [];
@@ -32,24 +42,32 @@ class MakeFake
     public $loremIpsum       = [];
     public $branded          = [];
     public $isoCodes         = [];
+    public $arrTime          = [];
 
     // built during processing
+    public $propName         = '';
     public $name             = [];
     public $location         = [];
     public $contact          = [];
     public $propInfo         = [];
-    public $gender           = [];
+    public $gender           = '';
     public $customerKeys     = [];
     public $partnerKeys      = [];
+    public $countryData      = NULL;
+    public $otherInfo        = [];
+    public $loginInfo        = [];
+    public $username         = '';
 
     public function __construct($config)
     {
+        $this->alpha            = range('a','z');
         $this->firstNamesMale   = file($config['SOURCE_FIRST_NAMES_MALE']);
         $this->surnames         = file($config['SOURCE_SURNAMES']);
         $this->firstNamesFemale = file($config['SOURCE_FIRST_NAMES_FEMALE']);
         $this->isoCodes         = file($config['SOURCE_COUNTRIES']);
         $this->isps             = file($config['SOURCE_ISP']);
         $this->loremIpsum       = file($config['SOURCE_LOREM_IPSUM']);
+        $this->arrTime          = range(0,23);
         // build array of branded hotels
         $this->branded = [];
         $brandedFile = new SplFileObject($config['SOURCE_BRANDED'], 'r');
@@ -59,42 +77,42 @@ class MakeFake
     }
 
     /**
-     * @param MongoDB\Connection $db
+     * @param MongoDB\Collection $collection
      * @return array $customerKeys
      */
-    public function buildCustomerKeys($db)
+    public function buildCustomerKeys($collection)
     {
         // build list of customer keys
         $this->customerKeys = [];
-        $cursor = $db->customers->find([],['customerKey' => 1]);
+        $cursor = $collection->find([],['customerKey' => 1]);
         foreach($cursor as $document)
             $this->customerKeys[] = $document->customerKey;
         return $this->customerKeys;
     }
 
     /**
-     * @param MongoDB\Connection $db
+     * @param MongoDB\Collection $collection
      * @return array $partnerKeys
      */
-    public function buildPartnerKeys($db)
+    public function buildPartnerKeys($collection)
     {
         // build list of partner keys
         $this->partnerKeys = [];
-        $cursor = $db->partners->find([],['partnerKey' => 1]);
+        $cursor = $collection->find([],['partnerKey' => 1]);
         foreach($cursor as $document)
             $this->partnerKeys[] = $document->partnerKey;
         return $this->partnerKeys;
     }
 
     /**
-     * @param MongoDB\Connection $db
+     * @param MongoDB\Collection $collection
      * @return array $partnerKeys
      */
-    public function buildIsoCodes($db)
+    public function buildIsoCodes($collection)
     {
         // build list of ISO codes
         $this->isoCodes = [];
-        $cursor   = $db->aggregate([['$group' => ['_id' => '$countryCode']]]);
+        $cursor   = $collection->aggregate([['$group' => ['_id' => '$countryCode']]]);
         foreach ($cursor as $document)
             $this->isoCodes[] = $document->_id;
         return $this->isoCodes;
@@ -137,7 +155,7 @@ class MakeFake
         $roomNumber   = (($x % 6) === 0) ? strtoupper(bin2hex(random_bytes(1))) : NULL;
 
         // do a count on "post_codes" documents for this $isoCode
-        $count = $collection->countDocuments(['countryCode' => $isoCode]);
+        $count = $collection->count(['countryCode' => $isoCode]);
         if ($count == 0) return FALSE;
 
         // generate a random number between 1 and count
@@ -146,6 +164,7 @@ class MakeFake
         // iterate until number is reached
         $document = $collection->findOne(['countryCode' => $isoCode],['skip' => $goTo]);
         if (!$document) return FALSE;
+        $this->countryData = $document;
 
         // from document extract city, postcode, latitude and longitude
         $city      = $document->placeName;
@@ -223,25 +242,25 @@ class MakeFake
         $brand = (($x % 3) === 0);
         if ($brand) {
             $key       = trim(array_keys($this->branded)[array_rand(array_keys($this->branded))]);
-            $propName  = trim($this->branded[$key][array_rand($this->branded[$key])]);
             $propType  = (($x % 2) === 0) ? 'hotel' : 'motel';
             $brand     = $key;
+            $this->propName  = trim($this->branded[$key][array_rand($this->branded[$key])]);
         } else {
             $propType  = array_keys($this->propertyType)[array_rand(array_keys($this->propertyType))];
-            $propName  = trim($name1[array_rand($name1)]) . ' ' . ucwords($this->propertyType[$type]);
             $brand     = NULL;
+            $this->propName  = $this->makePropName();
         }
         for ($z = 0; $z < rand(1,4); $z++) {
             $facilities  = $this->facilityType[array_rand($this->facilityType)];
         }
-        $countryDoc = $collection->findOne(['ISO2' => $isoCode]);
-        if ($countryDoc) {
-            $currency = $countryDoc->currencyCode;
+        $this->countryData = $this->countryData ?? $collection->findOne(['ISO2' => $isoCode]);
+        if ($this->countryData) {
+            $currency = $this->countryData->currencyCode;
         } else {
             $currency = 'USD';
         }
         $this->propInfo = [
-            'type'        => $propType,
+            'type'        => $this->propertyType[array_rand($this->propertyType)],
             'chain'       => $brand,
             'rating'      => (int) rand(1,5),
             'photos'      => NULL,
@@ -259,7 +278,7 @@ class MakeFake
     {
         // decide gender
         $this->gender = ((($x + rand(1,99)) % 2) == 0) ? 'M' : 'F';
-        $this->gender = ($x % 80 == 0) ? 'X' : $gender;               // account for "other"
+        $this->gender = ($x % 80 == 0) ? 'X' : $this->gender;               // account for "other"
         return $this->gender;
     }
     /**
@@ -315,9 +334,11 @@ class MakeFake
      * NOTE: must run $this->makeName() first!
      * @param int $x == loop index
      * @param MongoDB\Collection $collection
+     * @param string $isoCode
+     * @param bool $isOther
      * @return array $contact
      */
-    public function makeContact($x, $collection)
+    public function makeContact($x, $collection, $isoCode, $isOther = FALSE)
     {
         if (!$this->name) throw new Exception(self::ERROR_NAME);
         // Builds this structure:
@@ -329,15 +350,15 @@ class MakeFake
         }
          */
         // username
-        $username = strtolower(substr($this->name['first'], 0, 1) . substr($this->name['last'], 0, 7));
+        $this->username = strtolower(substr($this->name['first'], 0, 1) . substr($this->name['last'], 0, 7));
 
         // build primary email address
-        $email = $username . $x . '@' . strtolower(trim($this->isps[array_rand($this->isps)])) . '.com';
+        $email = $this->username . $x . '@' . strtolower(trim($this->isps[array_rand($this->isps)])) . '.com';
 
         // create phone number
-        $countryData = $collection->findOne(['ISO2' => $isoCode]);
-        $dialCode = (isset($countryData->dialingCode) && $countryData->dialingCode)
-                  ? '+' . $countryData->dialingCode . '-'
+        $this->countryData = $this->countryData ?? $collection->findOne(['ISO2' => $isoCode]);
+        $dialCode = (isset($this->countryData->dialingCode) && $this->countryData->dialingCode)
+                  ? '+' . $this->countryData->dialingCode . '-'
                   : '';
         $phone  = $dialCode . sprintf('%d-%03d-%04d', $x, rand(0,999), rand(0,9999));
 
@@ -347,12 +368,13 @@ class MakeFake
         } else {
             $soc1   = $this->socMedia[array_rand($this->socMedia)];
         }
-        $this->contact = [
+        $contact = [
             'email'    => $email,
             'phone'    => $phone,
             'socMedia' => [$soc1 => $email . '@' . $soc1 . '.com'],
         ];
-        return $this->contact;
+        if (!$isOther) $this->contact = $contact;
+        return $contact;
     }
     /**
      * @return array $rooms
@@ -387,10 +409,10 @@ class MakeFake
         return $rooms;
     }
     /**
-     * @param array $customerKeys
+     * @param int $x == current index
      * @return array $reviews
      */
-    public function makeReviews($customerKeys)
+    public function makeReviews($x)
     {
         /*
         Review = {
@@ -403,23 +425,131 @@ class MakeFake
             "badStuff"    : <text>
         }
         */
+        if (!$this->customerKeys) $this->buildCustomerKeys();
         $reviews = [];
-        for ($y = 0; $y < rand(0, 20); $y++ ) {
-            $reviews[$y]['customerKey'] = $this->customerKeys[array_rand($this->customerKeys)];
-            $reviews[$y]['staff']       = rand(1,5);
-            $reviews[$y]['cleanliness'] = rand(1,5);
-            $reviews[$y]['facilities']  = rand(1,5);
-            $reviews[$y]['comfort']     = rand(1,5);
-            $reviews[$y]['goodStuff']   = 'Very nice ' . $this->loremIpsum[array_rand($this->loremIpsum)];
-            $reviews[$y]['badStuff']    = 'Horrible ' . $this->loremIpsum[array_rand($this->loremIpsum)];
+        $max = rand(0, 20);
+        if ($max) {
+            for ($y = 0; $y < $max; $y++ ) {
+                // generate weighted total booked
+                switch (TRUE) {
+                    // highly rated
+                    case ($x % 7 === 0) :
+                        $low  = 3;
+                        $high = 5;
+                        break;
+                    // medium rating
+                    case ($x % 3 === 0) :
+                        $low  = 2;
+                        $high = 4;
+                        break;
+                    // average rating
+                    default :
+                        $low  = 1;
+                        $high = 5;
+                }
+                // populate $reviews with array data
+                $reviews[$y]['customerKey'] = $this->customerKeys[array_rand($this->customerKeys)];
+                $reviews[$y]['staff']       = rand($low,$high);
+                $reviews[$y]['cleanliness'] = rand($low,$high);
+                $reviews[$y]['facilities']  = rand($low,$high);
+                $reviews[$y]['comfort']     = rand($low,$high);
+                // 1 out of 3 will write good stuff
+                $reviews[$y]['goodStuff']   = ($x % 3 === 0) ? 'Very nice ' . $this->loremIpsum[array_rand($this->loremIpsum)] : '';
+                // 1 out of 2 will write bad stuff
+                $reviews[$y]['badStuff']    = ($x % 2) ? 'Horrible ' . $this->loremIpsum[array_rand($this->loremIpsum)]  : '';
+            }
         }
         $this->reviews = $reviews;
         return $reviews;
     }
     public function makePropName()
     {
-        return $this->propName1[array_rand($this->propName1)]
-               . ' '
-               . $this->propName2[array_rand($this->propName2)];
+        if (!$this->propName) {
+            $this->propName =  $this->propName1[array_rand($this->propName1)]
+                           . ' '
+                           . $this->propName2[array_rand($this->propName2)];
+        }
+        return $this->propName;
+    }
+    public function makeOtherInfo($x)
+    {
+        // generate DOB at random
+        $year = date('Y') - rand(16, 89);
+        $month = rand(1,12);
+        $day   = ($month == 2) ? rand(1,28) : rand(1,30);
+        $dob   = sprintf('%4d-%02d-%02d', $year, $month, $day);
+
+        if (!$this->gender) $this->setGender($x);
+        $this->otherInfo = [
+            'gender'      => $this->gender,
+            'dateOfBirth' => $dob
+        ];
+        return $this->otherInfo;
+    }
+    public function makeLoginInfo($password)
+    {
+        if (!$this->username) throw new Exception(self::ERROR_NAME);
+        if (!$this->contact) throw new Exception(self::ERROR_CONTACT);
+        if ($password == 'RANDOM') {
+            $password = base64_encode(random_bytes(6));
+        } else {
+            $password = self::DEFAULT_PASSWORD;
+        }
+        $soc1 = NULL;
+        if ($this->contact['socMedia']) $soc1 = key($this->contact['socMedia']);
+        $this->loginInfo = [
+            'username' => $this->username,
+            'oauth2'   => ($soc1) ? $this->username . '@' . $soc1 . '.com' : NULL,
+            'password' => password_hash($password, PASSWORD_BCRYPT),
+        ];
+        return $this->loginInfo;
+   }
+   public function makeBookingInfo($x)
+   {
+        //*** BookingInfo ******************************************************
+        $checkoutTime = $this->checkout[array_rand($this->checkout)] . ':00:00';
+        $nowStr = date('Y-m-d') . ' ' . sprintf('%02d:%02d:00', $this->arrTime[array_rand($this->arrTime)], rand(0,59));
+        $arrObj = new DateTime($nowStr);
+        $interval = new DateInterval('P' . rand(1,666) . 'D');
+        if (($x % 2) === 0) {
+            $arrObj->add($interval);
+            $bookingStatus = 'pending';
+        } else {
+            $arrObj->sub($interval);
+            $bookingStatus = 'confirmed';
+        }
+        if (($x % 70) === 0) $bookingStatus = 'cancelled';
+        switch ($bookingStatus) {
+            case 'pending' :
+                if ($x % 3) {
+                    $paymentStatus = 'pending';
+                } else {
+                    $paymentStatus = 'confirmed';
+                }
+                break;
+            case 'confirmed' :
+                $paymentStatus = 'confirmed';
+                break;
+            case 'cancelled' :
+                if ($x % 3) {
+                    $paymentStatus = 'pending';
+                } else {
+                    $paymentStatus = 'refunded';
+                }
+                break;
+            default :
+                $paymentStatus = 'pending';
+        }
+        $depObj = new DateTime($arrObj->format('Y-m-d') . ' ' . $checkoutTime);
+        $depObj->add(new DateInterval('P' . $this->lengthStay[array_rand($this->lengthStay)] . 'D'));
+        $this->bookingInfo = [
+            'arrivalDate'       => $arrObj->format(DATE_FORMAT),
+            'departureDate'     => $depObj->format(DATE_FORMAT),
+            'checkoutTime'      => $checkoutTime,
+            'refundableUntil'   => $arrObj->sub(new DateInterval('P' . rand(1,14) . 'D'))->format(DATE_FORMAT),
+            'reservationStatus' => $bookingStatus,
+            'paymentStatus'     => $paymentStatus,
+        ];
+        return $this->bookingInfo;
     }
 }
