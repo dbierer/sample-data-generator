@@ -10,6 +10,7 @@ class MakeFake
 {
     const ERROR_NAME       = 'ERROR: must run "makeName()" before running "makeContact()" or "makeLoginInfo()"';
     const ERROR_CONTACT    = 'ERROR: must run "makeContact()" before running "makeLoginInfo()"';
+    const ERROR_BUSINESS_NAME_UNIQUE = 'ERROR: unable to generate unique business name';
     const DEFAULT_PASSWORD = 'password';
 
     // source data
@@ -18,8 +19,8 @@ class MakeFake
     public $street3       = ['Way','Street','Boulevard','Avenue','Drive','Road','Circle','Ride'];
     public $weightedIso   = ['US','CA','GB','AU','IN'];
     public $socMedia      = ['google','twitter','facebook','line','skype','linkedin'];
-    public $propName1     = ['Cozy','Riverside','Lakeside','Mountain','Rose','Garden','Valley','Castle','Sleepy','Amazing','Awesome','Romantic','Secluded','Peaceful','Restful','Quiet','Tranquil','Getaway','Take a Break','Famous','Destination','Travel','Voyage'];
-    public $propName2     = ['Lodge','Hotel','Inn','House','Stay','Resort','Destination','Keep','Hall'];
+    public $propName1     = ['Cozy','Riverside','Lakeside','Mountain','Rose','Garden','Valley','Castle','Sleepy','Amazing','Awesome','Romantic','Secluded','Peaceful','Restful','Quiet','Tranquil','Getaway','Take a Break','Famous','Destination','Travel','Voyage','Mystic','Royal','Majestic','Sterling'];
+    public $propName2     = ['Lodge','Hotel','Inn','House','Stay','Resort','Destination','Keep','Hall','Inn','Hotel','Lodge'];
     public $bedType       = ['single', 'double', 'queen', 'king'];
     public $propertyType  = ['hotel','motel','inn','guest house','hostel','resort','serviced apartment','condo','b & b','lodge'];
     public $refundable    = ['yes','no'];
@@ -32,6 +33,9 @@ class MakeFake
     public $rsvStatus     = ['pending','confirmed','cancelled'];
     public $payStatus     = ['pending','confirmed','refunded'];
     public $suffixes      = ['II','III','Jr','Sr'];
+    public $business1     = ['Friendly','Serious','Industrious','Fat Cats','Comfort','Accomodation','Lazy Bird','Leisure','Sleep Right','Stay Awhile'];
+    public $business2     = ['Industries','Associates','Trust','Business','Partners'];
+    public $business3     = ['Inc','Ltd','Company','LLC',''];
 
     // built in __construct
     public $alpha            = [];
@@ -46,6 +50,11 @@ class MakeFake
 
     // built during processing
     public $propName         = '';
+    public $businessName     = '';
+    public $username         = '';
+    public $soc1             = '';
+    public $email            = '';
+    public $phone            = '';
     public $name             = [];
     public $location         = [];
     public $contact          = [];
@@ -56,7 +65,7 @@ class MakeFake
     public $countryData      = NULL;
     public $otherInfo        = [];
     public $loginInfo        = [];
-    public $username         = '';
+    public $busiNameHistory  = [];
 
     public function __construct($config)
     {
@@ -321,6 +330,9 @@ class MakeFake
             }
         }
 
+        // create username
+        $this->username = strtolower(substr($first, 0, 1) . substr($last, 0, 7));
+
         $this->name = [
             'title'  => $title,
             'first'  => $first,
@@ -363,7 +375,7 @@ class MakeFake
         $phone  = $dialCode . sprintf('%d-%03d-%04d', $x, rand(0,999), rand(0,9999));
 
         // pick social media at random
-        if ($x % 10) {
+        if ($x % 3 === 0) {
             $soc1 = '';     // no social media
         } else {
             $soc1   = $this->socMedia[array_rand($this->socMedia)];
@@ -371,9 +383,14 @@ class MakeFake
         $contact = [
             'email'    => $email,
             'phone'    => $phone,
-            'socMedia' => [$soc1 => $email . '@' . $soc1 . '.com'],
+            'socMedia' => ($soc1) ? [$soc1 => $email . '@' . $soc1 . '.com'] : [],
         ];
-        if (!$isOther) $this->contact = $contact;
+        if (!$isOther) {
+            $this->soc1 = $soc1;
+            $this->email = $email;
+            $this->phone = $phone;
+            $this->contact = $contact;
+        }
         return $contact;
     }
     /**
@@ -470,6 +487,30 @@ class MakeFake
                            . $this->propName2[array_rand($this->propName2)];
         }
         return $this->propName;
+    }
+    public function makeBusinessName()
+    {
+        $status = 0;
+        for ($x = 100; $x > 0; $x--) {
+            $name = $this->buildBusinessName();
+            if (!in_array($name, $this->busiNameHistory)) {
+                $status = 1;
+                break;
+            }
+        }
+        if (!$status)
+            throw new Exception(self::ERROR_BUSINESS_NAME_UNIQUE);
+        $this->businessName = $name;
+        $this->busiNameHistory[] = $name;
+        return $name;
+    }
+    protected function buildBusinessName()
+    {
+        return $this->business1[array_rand($this->business1)]
+               . ' '
+               . $this->business2[array_rand($this->business2)]
+               . ' '
+               . $this->business3[array_rand($this->business3)];
     }
     public function makeOtherInfo($x)
     {

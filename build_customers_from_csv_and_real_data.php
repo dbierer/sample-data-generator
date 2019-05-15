@@ -68,14 +68,12 @@ try {
     // build sample data
     for ($x = 100; $x < ($max + 100); $x++) {
 
-        // pick country code
-        // pick country code
+        //*** Country Code ***********************************************************
         if (($x % 2) === 0) {
             $isoCode = $makeFake->weightedIso[array_rand($makeFake->weightedIso)];
         } else {
             $isoCode = trim($isoCodes[array_rand($isoCodes)]);
         }
-        //************************************************************************
 
         //*** Build Address *********************************************************
         $location = $makeFake->makeAddress($x, $source->post_codes, $isoCode);
@@ -88,29 +86,32 @@ try {
         $contact = $makeFake->makeContact($x, $source->iso_country_codes, $isoCode);
 
         //*** Build SecondaryContactInfo ************************************************
-        $temp[]  = $makeFake->makeContact($x, $source->iso_country_codes, $isoCode, TRUE);
-        $temp[]  = $makeFake->makeContact($x, $source->iso_country_codes, $isoCode, TRUE);
-        $temp[]  = $makeFake->makeContact($x, $source->iso_country_codes, $isoCode, TRUE);
-        foreach ($temp as $values) {
+        $stop = rand(0, 3);
+        $otherContact = [];
+        for ($i = 0; $i < $stop; $i++) {
+            $temp = $makeFake->makeContact($x, $source->iso_country_codes, $isoCode, TRUE);
             $otherContact['emails'][] = $temp['email'];
-            $otherContact['phoneNumbers'][] = $temp['phoneNumber'];
-            $otherContact['socMedias'][] = $temp['socMedia'];
+            $otherContact['phoneNumbers'][] = $temp['phone'];
+            if ($temp['socMedia']) {
+                $otherContact['socMedias'][] = $temp['socMedia'];
+            }
         }
 
         //*** Build OtherInfo ************************************************
         $otherInfo = $makeFake->makeOtherInfo($x);
 
         //*** Build LoginInfo ************************************************
-        // write plain text email + username + password to CSV file
-        // NOTE: all passwords are "password"
-        $pwdFile->fputcsv([$email,$username,$password]);
-
         if ($password == 'RANDOM') {
             $password = base64_encode(random_bytes(6));
         }
+
+        // write plain text email + username + password to CSV file
+        // NOTE: all passwords are "password"
+        $pwdFile->fputcsv([$makeFake->email,$makeFake->username,$password]);
+
         $login = [
-            'username' => $username,
-            'oauth2'   => ($soc1) ? $username . '@' . $soc1 . '.com' : NULL,
+            'username' => $makeFake->username,
+            'oauth2'   => ($makeFake->soc1) ? $makeFake->username . '@' . $makeFake->soc1 . '.com' : NULL,
             'password' => password_hash($password, PASSWORD_BCRYPT),
         ];
         //************************************************************************
@@ -136,7 +137,7 @@ try {
         $insert = [
             'customerKey' => $custKey,
             'name'        => $name,
-            'address'     => $address,
+            'address'     => $location,
             'contact'     => $contact,
             'login'       => $login,
             'otherContact'=> $otherContact,
